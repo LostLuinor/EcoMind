@@ -1,0 +1,40 @@
+<!HTML>
+<head>
+<title>Q7</title>
+</head>
+<body style="background:white; font-color:black" id="fullPage">
+<select id="theme" onchange="change()">
+    <option value="light">LIGHT</option>
+    <option value="dark">DARK</option>
+</select>
+</body>
+<script>
+    page = document.getElementById("fullPage");
+    function change() {
+        var theme = document.getElementById("theme").value
+        if (theme == "light") {
+            page.style.background = "white";
+            page.style.color = "black";
+        }
+        else {
+            page.style.background = "black";
+            page.style.color = "white";
+        }
+    }
+</script>
+</body>
+</HTML>
+<p id='DateAndTime'></p>
+<script>
+  d = new Date();
+  curDate = d.getDate();
+  curMonth = d.getMonth() + 1; // Months are zero-based
+  curYear = d.getFullYear();
+  curHour = d.getHours();
+  curMin = d.getMinutes();
+  curSec = d.getSeconds();
+
+  display = curDate + "/" + curMonth + "/" + curYear + " " + curHour + ":" + curMin + ":" + curSec;
+
+  document.getElementById("DateAndTime").textContent = display;
+</script>
