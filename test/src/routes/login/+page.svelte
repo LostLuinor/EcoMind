@@ -1,6 +1,7 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { setUser } from '../../stores';
+	import { API_BASE_URL } from '$lib/config';
 	import { Leaf, Eye, EyeOff, Mail, Lock, Github, Linkedin } from 'lucide-svelte';
 
 	let username = '';
@@ -20,7 +21,7 @@
 		errorMessage = '';
 
 		try {
-			const response = await fetch('http://localhost:8000/api/login', {
+			const response = await fetch(`${API_BASE_URL}/login`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',

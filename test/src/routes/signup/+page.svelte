@@ -1,18 +1,44 @@
 <script>
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { API_BASE_URL } from '$lib/config';
 	import { Leaf, Eye, EyeOff, User, Mail, Building2, Shield, Sparkles } from 'lucide-svelte';
 
 	let name = '';
 	let email = '';
 	let password = '';
 	let confirmPassword = '';
-	let userType = 'Individual'; // Default user type
-	let organizationName = '';
+	let selectedOrgId = '';
+	let organizations = [];
 	let errorMessage = '';
 	let successMessage = '';
 	let isLoading = false;
+	let isLoadingOrgs = true;
 	let showPassword = false;
 	let showConfirmPassword = false;
+
+	onMount(async () => {
+		await fetchOrganizations();
+	});
+
+	async function fetchOrganizations() {
+		try {
+			isLoadingOrgs = true;
+			const response = await fetch(`${API_BASE_URL}/organizations`);
+			const data = await response.json();
+			
+			if (data.success) {
+				organizations = data.organizations;
+			} else {
+				errorMessage = 'Unable to load organizations';
+			}
+		} catch (error) {
+			console.error('Error fetching organizations:', error);
+			errorMessage = 'Unable to load organizations. Please refresh the page.';
+		} finally {
+			isLoadingOrgs = false;
+		}
+	}
 
 	async function handleSubmit() {
 		// Validation
@@ -21,8 +47,8 @@
 			return;
 		}
 
-		if (userType === 'Organization' && !organizationName) {
-			errorMessage = 'Please enter your organization name';
+		if (!selectedOrgId) {
+			errorMessage = 'Please select an organization';
 			return;
 		}
 
@@ -48,7 +74,7 @@
 		successMessage = '';
 
 		try {
-			const response = await fetch('http://localhost:8000/api/register', {
+			const response = await fetch(`${API_BASE_URL}/register`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -57,8 +83,7 @@
 					name: name,
 					email: email,
 					password: password,
-					userType: userType,
-					organizationName: organizationName || null,
+					org_id: parseInt(selectedOrgId),
 					role: 'user'
 				})
 			});
@@ -66,19 +91,18 @@
 			const data = await response.json();
 
 			if (data.success) {
-				successMessage = 'Welcome to EcoMind! Redirecting to login...';
+				successMessage = 'Registration successful! Your account is pending admin approval. Redirecting to login...';
 				// Clear form
 				name = '';
 				email = '';
 				password = '';
 				confirmPassword = '';
-				userType = 'Individual';
-				organizationName = '';
+				selectedOrgId = '';
 				
-				// Redirect to login after 2 seconds
+				// Redirect to login after 3 seconds
 				setTimeout(() => {
 					goto('/login');
-				}, 2000);
+				}, 3000);
 			} else {
 				errorMessage = data.message || 'Registration failed';
 			}
@@ -234,42 +258,41 @@
 						/>
 					</div>
 
-					<!-- User Type Field -->
+					<!-- Organization Selection Field -->
 					<div>
-						<label for="userType" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-							<Shield class="w-4 h-4 text-green-600" />
-							Account Type
+						<label for="organization" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+							<Building2 class="w-4 h-4 text-green-600" />
+							Organization
 						</label>
-						<select 
-							id="userType" 
-							bind:value={userType}
-							disabled={isLoading}
-							class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed appearance-none bg-white shadow-sm hover:shadow-md"
-						>
-							<option value="Individual">Individual</option>
-							<option value="Organization">Organization</option>
-							<option value="Community">Community</option>
-						</select>
-					</div>
-
-					<!-- Organization Name Field (Conditional) -->
-					{#if userType === 'Organization'}
-						<div class="animate-fadeIn">
-							<label for="organizationName" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-								<Building2 class="w-4 h-4 text-teal-600" />
-								Organization Name
-							</label>
-							<input 
-								type="text" 
-								id="organizationName" 
-								bind:value={organizationName} 
-								placeholder="Enter your organization name"
-								required
+						{#if isLoadingOrgs}
+							<div class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 flex items-center gap-2">
+								<div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+								<span class="text-gray-500 text-sm">Loading organizations...</span>
+							</div>
+						{:else if organizations.length === 0}
+							<div class="w-full px-4 py-3 border border-red-200 rounded-xl bg-red-50 text-red-600 text-sm">
+								No organizations available. Please contact support.
+							</div>
+						{:else}
+							<select 
+								id="organization" 
+								bind:value={selectedOrgId}
 								disabled={isLoading}
-								class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-							/>
-						</div>
-					{/if}
+								required
+								class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200 disabled:bg-gray-50 disabled:cursor-not-allowed appearance-none bg-white shadow-sm hover:shadow-md"
+							>
+								<option value="">Select your organization</option>
+								{#each organizations as org}
+									<option value={org.org_id}>
+										{org.name} {org.industry ? `- ${org.industry}` : ''}
+									</option>
+								{/each}
+							</select>
+							<p class="mt-1 text-xs text-gray-500">
+								Select the organization you belong to
+							</p>
+						{/if}
+					</div>
 					
 					<!-- Password Field -->
 					<div>
@@ -335,7 +358,7 @@
 					
 					<button 
 						type="submit" 
-						disabled={isLoading}
+						disabled={isLoading || isLoadingOrgs || organizations.length === 0}
 						class="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-3.5 px-6 rounded-xl font-semibold hover:from-green-700 hover:to-teal-700 focus:ring-4 focus:ring-green-200 transition-all duration-200 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
 					>
 						{#if isLoading}
@@ -363,12 +386,12 @@
 
 
 <style>
-	@keyframes fadeIn {
-		from { opacity: 0; transform: translateY(10px); }
-		to { opacity: 1; transform: translateY(0); }
-	}
-	
-	.animate-fadeIn {
-		animation: fadeIn 0.3s ease-out;
+	/* Custom scrollbar styling for select dropdown */
+	:global(select) {
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+		background-position: right 0.5rem center;
+		background-repeat: no-repeat;
+		background-size: 1.5em 1.5em;
+		padding-right: 2.5rem;
 	}
 </style>

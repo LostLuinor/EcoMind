@@ -6,7 +6,8 @@
 		Target, 
 		Recycle, 
 		FileText,
-		Shield
+		Shield,
+		ScrollText
 	} from 'lucide-svelte';
 	import { user, type User } from '../../stores';
 	
@@ -38,20 +39,24 @@
 			<Target class="w-5 h-5" />
 			<span class="hidden lg:block {sidebarExpanded ? 'block' : 'hidden'}">Recommendations</span>
 		</a>
-		<a href="/sustainability" class="flex items-center gap-3 px-3 py-2 rounded-lg {currentPage === 'sustainability' ? 'bg-green-50 text-green-700' : 'text-gray-600'} hover:bg-green-50 hover:text-green-700 transition-colors">
+		<!-- <a href="/sustainability" class="flex items-center gap-3 px-3 py-2 rounded-lg {currentPage === 'sustainability' ? 'bg-green-50 text-green-700' : 'text-gray-600'} hover:bg-green-50 hover:text-green-700 transition-colors">
 			<Recycle class="w-5 h-5" />
 			<span class="hidden lg:block {sidebarExpanded ? 'block' : 'hidden'}">Sustainability</span>
 		</a>
 		<a href="/reports" class="flex items-center gap-3 px-3 py-2 rounded-lg {currentPage === 'reports' ? 'bg-green-50 text-green-700' : 'text-gray-600'} hover:bg-green-50 hover:text-green-700 transition-colors">
 			<FileText class="w-5 h-5" />
 			<span class="hidden lg:block {sidebarExpanded ? 'block' : 'hidden'}">Reports</span>
-		</a>
+		</a> -->
 
 		<!-- Admin Link (only visible to admins) -->
 		{#if currentUser && currentUser.role === 'admin'}
 			<a href="/admin" class="flex items-center gap-3 px-3 py-2 rounded-lg {currentPage === 'admin' ? 'bg-purple-50 text-purple-700' : 'text-gray-600'} hover:bg-purple-50 hover:text-purple-700 transition-colors border-t border-gray-200 mt-2 pt-4">
 				<Shield class="w-5 h-5" />
 				<span class="hidden lg:block {sidebarExpanded ? 'block' : 'hidden'}">Admin Panel</span>
+			</a>
+			<a href="/audit-logs" class="flex items-center gap-3 px-3 py-2 rounded-lg {currentPage === 'audit-logs' ? 'bg-purple-50 text-purple-700' : 'text-gray-600'} hover:bg-purple-50 hover:text-purple-700 transition-colors">
+				<ScrollText class="w-5 h-5" />
+				<span class="hidden lg:block {sidebarExpanded ? 'block' : 'hidden'}">Audit Logs</span>
 			</a>
 		{/if}
 	</nav>

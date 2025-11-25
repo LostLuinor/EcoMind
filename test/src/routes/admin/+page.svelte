@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import Navbar from '$lib/widgets/Navbar.svelte';
 	import Sidebar from '$lib/widgets/Sidebar.svelte';
+	import { API_BASE_URL } from '$lib/config';
 	import { 
 		Users, 
 		Shield, 
@@ -70,7 +71,7 @@
 	async function fetchUsers() {
 		loading = true;
 		try {
-			const response = await fetch(`http://localhost:8000/api/admin/users?admin_id=${currentUser?.user_id}`);
+			const response = await fetch(`${API_BASE_URL}/admin/users?admin_id=${currentUser?.user_id}`);
 			const data = await response.json();
 			
 			if (data.success) {
@@ -114,7 +115,7 @@
 
 	async function updateUserStatus(userId: number, newStatus: string) {
 		try {
-			const response = await fetch(`http://localhost:8000/api/admin/users/status?admin_id=${currentUser?.user_id}`, {
+			const response = await fetch(`${API_BASE_URL}/admin/users/status?admin_id=${currentUser?.user_id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ user_id: userId, status: newStatus })
@@ -131,7 +132,7 @@
 
 	async function updateUserRole(userId: number, newRole: string) {
 		try {
-			const response = await fetch(`http://localhost:8000/api/admin/users/role?admin_id=${currentUser?.user_id}`, {
+			const response = await fetch(`${API_BASE_URL}/admin/users/role?admin_id=${currentUser?.user_id}`, {
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ user_id: userId, role: newRole })
@@ -150,7 +151,7 @@
 		if (!confirm('Are you sure you want to delete this user?')) return;
 		
 		try {
-			const response = await fetch(`http://localhost:8000/api/admin/users/${userId}?admin_id=${currentUser?.user_id}`, {
+			const response = await fetch(`${API_BASE_URL}/admin/users/${userId}?admin_id=${currentUser?.user_id}`, {
 				method: 'DELETE'
 			});
 			

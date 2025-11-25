@@ -1,5 +1,5 @@
 <script>
-  import { Zap, Globe, Brain, Shield, BarChart3, ArrowRight, Linkedin, Github, Instagram } from 'lucide-svelte';
+  import { Zap, Leaf, Globe, Brain, Shield, BarChart3, ArrowRight, Linkedin, Github, Instagram } from 'lucide-svelte';
   import { goto } from '$app/navigation';
   import overviewImage from '$lib/assets/overview.jpeg';
 
@@ -21,12 +21,16 @@
   <!-- Navigation Bar -->
   <nav class="w-full h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-8 shadow-sm sticky top-0 z-50">
     <!-- Logo and App Name -->
-    <div class="flex items-center gap-4">
-      <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center text-white">
-        <Zap class="w-6 h-6" />
-      </div>
-      <span class="text-base sm:text-xl font-bold text-green-600 whitespace-nowrap hidden sm:block">AI Powered Carbon FootPrint</span>
-    </div>
+			<div class="flex items-center gap-3 cursor-pointer" role="button" tabindex="0" on:click={goHome} on:keypress={(e) => e.key === 'Enter' && goHome()}>
+				<div class="w-8 h-8 bg-gradient-to-br from-green-600 to-teal-600 rounded-lg flex items-center justify-center">
+					<Leaf class="w-5 h-5 text-white" />
+				</div>
+				<div class="flex items-center gap-2">
+					<span class="font-bold text-xl bg-gradient-to-r from-green-700 to-teal-700 bg-clip-text text-transparent font-[cursive]">EcoMind</span>
+
+					<!-- <span class="text-green-600 text-lg">🌿</span> -->
+				</div>
+			</div>
 
     <!-- Action Buttons -->
     <div class="flex items-center gap-2 sm:gap-4">
@@ -217,11 +221,13 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
         <!-- Logo and Description -->
         <div class="text-center md:text-left">
-          <div class="flex items-center gap-3 justify-center md:justify-start mb-4">
-            <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-              <Zap class="w-6 h-6 text-white" />
+          <div class="flex items-center gap-3 cursor-pointer" role="button" tabindex="0" on:click={goHome} on:keypress={(e) => e.key === 'Enter' && goHome()}>
+            <div class="w-8 h-8 bg-gradient-to-br from-green-600 to-teal-600 rounded-lg flex items-center justify-center">
+              <Leaf class="w-5 h-5 text-white" />
             </div>
-            <span class="text-xl font-bold">Smart Carbon System</span>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-xl bg-gradient-to-r from-green-700 to-teal-700 bg-clip-text text-transparent font-[cursive]">EcoMind</span>
+            </div>
           </div>
           <p class="text-gray-400 leading-relaxed">
             Empowering individuals and organizations to make data-driven decisions for a sustainable future through AI-powered carbon footprint tracking.

@@ -1,7 +1,10 @@
-<script>
+<script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import Navbar from '$lib/widgets/Navbar.svelte';
 	import Sidebar from '$lib/widgets/Sidebar.svelte';
+	import ApprovalPending from '$lib/components/ApprovalPending.svelte';
+	import { API_BASE_URL } from '$lib/config';
 	import { 
 		Brain,
 		TrendingUp,
@@ -24,79 +27,53 @@
 		CheckCircle,
 		Clock,
 		ArrowUp,
-		ArrowDown
+		ArrowDown,
+		Leaf
 	} from 'lucide-svelte';
+	import { user, setUser } from '../../stores';
 
 	let sidebarExpanded = false;
 	let isGeneratingInsight = false;
+	let isLoading = true;
+	let errorMessage = '';
+	let isApproved = true; // Track if user is approved
 	
 	function toggleSidebar() {
 		sidebarExpanded = !sidebarExpanded;
 	}
 
+	// Get user from store
+	let currentUser: any | null = null;
+	let userId: number | null = null;
+
+
 	// AI Insights data
+	type TrendPoint = {
+		month: string;
+		actual: number | null;
+		predicted: number | null;
+	};
 	let keyPredictions = {
-		nextMonthEmissions: { value: 2650, change: -8.2, trend: 'down' },
-		aiConfidence: 94,
-		topRiskSources: ['Transportation', 'Heating', 'Manufacturing']
+		nextMonthEmissions: { value: 0, change: 0, trend: 'down' },
+		nextMonthEnergy: { value: 0, change: 0, trend: 'down' },
+		topRiskSources: [] as string[]
 	};
 
-	let trendData = [
-		{ month: 'Jan', actual: 2840, predicted: 2845 },
-		{ month: 'Feb', actual: 2720, predicted: 2715 },
-		{ month: 'Mar', actual: 2890, predicted: 2885 },
-		{ month: 'Apr', actual: 2650, predicted: 2660 },
-		{ month: 'May', actual: 2780, predicted: 2775 },
-		{ month: 'Jun', actual: 2590, predicted: 2580 },
-		{ month: 'Jul', actual: null, predicted: 2520 },
-		{ month: 'Aug', actual: null, predicted: 2480 },
-		{ month: 'Sep', actual: null, predicted: 2440 }
-	];
+	let emissionsTrendData: TrendPoint[] = [];
+	let energyTrendData: TrendPoint[] = [];
+	let aiInsights: any[] = [];
+	let insightsGenerated = 0;
 
-	let aiInsights = [
-		{
-			id: 1,
-			type: 'prediction',
-			icon: TrendingUp,
-			title: 'Transportation Emissions Rising',
-			message: 'Your transportation emissions are expected to rise by 8% next week. Consider route optimization or carpooling to reduce impact.',
-			confidence: 89,
-			timestamp: '2 minutes ago',
-			severity: 'medium'
-		},
-		{
-			id: 2,
-			type: 'opportunity',
-			icon: Lightbulb,
-			title: 'Energy Optimization Detected',
-			message: 'AI detected 15% energy waste during off-peak hours. Implementing smart scheduling could save 180 kg CO₂ monthly.',
-			confidence: 96,
-			timestamp: '5 minutes ago',
-			severity: 'high'
-		},
-		{
-			id: 3,
-			type: 'alert',
-			icon: AlertTriangle,
-			title: 'Seasonal Pattern Alert',
-			message: 'Historical data shows 25% increase in heating emissions during this period. Pre-emptive action recommended.',
-			confidence: 92,
-			timestamp: '12 minutes ago',
-			severity: 'medium'
-		},
-		{
-			id: 4,
-			type: 'success',
-			icon: CheckCircle,
-			title: 'Goal Achievement Likely',
-			message: 'Based on current trends, you\'re 87% likely to achieve your monthly reduction target of 2,500 kg CO₂.',
-			confidence: 87,
-			timestamp: '18 minutes ago',
-			severity: 'low'
-		}
-	];
+	// Icon mapping for dynamic icons
+	const iconMap: any = {
+		'prediction': TrendingUp,
+		'opportunity': Lightbulb,
+		'alert': AlertTriangle,
+		'warning': AlertTriangle,
+		'success': CheckCircle
+	};
 
-	function getSeverityColor(severity) {
+	function getSeverityColor(severity: string) {
 		switch(severity) {
 			case 'high': return 'border-l-red-500 bg-red-50';
 			case 'medium': return 'border-l-yellow-500 bg-yellow-50';
@@ -105,7 +82,7 @@
 		}
 	}
 
-	function getIconColor(severity) {
+	function getIconColor(severity: string) {
 		switch(severity) {
 			case 'high': return 'text-red-600';
 			case 'medium': return 'text-yellow-600';
@@ -114,29 +91,167 @@
 		}
 	}
 
+	function extractMaxValue(data: TrendPoint[]) {
+		const values = data
+			.flatMap(point => [point.actual, point.predicted])
+			.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+		const max = Math.max(0, ...values);
+		return max > 0 ? max : 1;
+	}
+
+	function getBarHeight(value: number | null | undefined, maxValue: number) {
+		if (typeof value !== 'number' || !Number.isFinite(value) || maxValue <= 0) {
+			return '3%';
+		}
+		const percentage = (value / maxValue) * 100;
+		return `${Math.max(percentage, 3)}%`;
+	}
+
+	$: emissionsMaxValue = extractMaxValue(emissionsTrendData);
+	$: energyMaxValue = extractMaxValue(energyTrendData);
+
+	async function fetchPredictions() {
+		try {
+			const response = await fetch(`${API_BASE_URL}/ai-insights/predictions?user_id=${userId}`);
+			
+			// Check if user is not approved
+			if (response.status === 403) {
+				isApproved = false;
+				return;
+			}
+			
+			const data = await response.json();
+			
+			if (data.success) {
+				keyPredictions = {
+					nextMonthEmissions: data.predictions.next_month_emissions,
+					nextMonthEnergy: data.predictions.next_month_energy,
+					topRiskSources: data.predictions.top_risk_sources
+				};
+			}
+		} catch (error) {
+			console.error('Error fetching predictions:', error);
+		}
+	}
+
+	async function fetchTrends() {
+		try {
+			// Fetch both emissions and energy trends in parallel
+			const [emissionsResponse, energyResponse] = await Promise.all([
+				fetch(`${API_BASE_URL}/ai-insights/trends?user_id=${userId}&data_type=emissions`),
+				fetch(`${API_BASE_URL}/ai-insights/trends?user_id=${userId}&data_type=energy`)
+			]);
+			
+			// Parse responses in parallel
+			const [emissionsData, energyData] = await Promise.all([
+				emissionsResponse.json(),
+				energyResponse.json()
+			]);
+			
+			if (emissionsData.success) {
+				emissionsTrendData = emissionsData.trends;
+			}
+			
+			if (energyData.success) {
+				energyTrendData = energyData.trends;
+			}
+		} catch (error) {
+			console.error('Error fetching trends:', error);
+		}
+	}
+
+	async function fetchRecommendations() {
+		try {
+			const response = await fetch(`${API_BASE_URL}/ai-insights/recommendations?user_id=${userId}`);
+			const data = await response.json();
+			
+			if (data.success) {
+				aiInsights = data.insights.map((insight: any) => ({
+					...insight,
+					icon: iconMap[insight.type as string] || Brain
+				}));
+				insightsGenerated = data.total_count;
+			}
+		} catch (error) {
+			console.error('Error fetching recommendations:', error);
+		}
+	}
+
 	async function generateNewInsight() {
 		isGeneratingInsight = true;
 		
-		// Simulate AI generation delay
-		await new Promise(resolve => setTimeout(resolve, 2000));
+		try {
+			const response = await fetch(`${API_BASE_URL}/ai-insights/generate?user_id=${userId}`, {
+				method: 'POST'
+			});
+			const data = await response.json();
+			
+			if (data.success) {
+				const newInsight = {
+					...data.insight,
+					icon: iconMap[data.insight.type as string] || Brain
+				};
+				
+				aiInsights = [newInsight, ...aiInsights];
+				insightsGenerated++;
+			}
+		} catch (error) {
+			console.error('Error generating insight:', error);
+		} finally {
+			isGeneratingInsight = false;
+		}
+	}
+
+	async function loadAllData() {
+		if (!userId) {
+			console.error('No userId available, cannot load data');
+			isLoading = false;
+			return;
+		}
 		
-		const newInsight = {
-			id: aiInsights.length + 1,
-			type: 'prediction',
-			icon: Brain,
-			title: 'AI Analysis Complete',
-			message: 'New pattern identified: Weekend emissions are 23% lower. Consider extending remote work policies to reduce weekday office energy consumption.',
-			confidence: 91,
-			timestamp: 'Just now',
-			severity: 'medium'
-		};
+		isLoading = true;
+		errorMessage = '';
 		
-		aiInsights = [newInsight, ...aiInsights];
-		isGeneratingInsight = false;
+		try {
+			await Promise.all([
+				fetchPredictions(),
+				fetchTrends(),
+				fetchRecommendations()
+			]);
+		} catch (error) {
+			console.error('Error loading data:', error);
+			errorMessage = 'Failed to load AI insights. Please try refreshing the page.';
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	onMount(() => {
-		// Add subtle animations and real-time updates here
+		// Check if user is logged in from sessionStorage
+		const userData = sessionStorage.getItem('user');
+		if (userData) {
+			try {
+				const parsedUser = JSON.parse(userData);
+				setUser(parsedUser);
+				currentUser = parsedUser;
+				userId = parsedUser.user_id;
+				
+				// Check if user is approved
+				if (parsedUser.status !== 'approved') {
+					isApproved = false;
+					isLoading = false;
+					return;
+				}
+				
+				loadAllData();
+			} catch (e) {
+				console.error('Failed to parse user data:', e);
+				goto('/');
+			}
+		} else {
+			// Redirect to login if no user data
+			goto('/');
+		}
 	});
 </script>
 
@@ -144,6 +259,10 @@
 	<title>AI Insights - CarbonTrack</title>
 </svelte:head>
 
+{#if !isApproved && currentUser}
+	<!-- Show Approval Pending Screen -->
+	<ApprovalPending userStatus={currentUser.status} userName={currentUser.name} />
+{:else}
 <div class="min-h-screen bg-gray-50">
 	<!-- Top Navigation -->
 	<Navbar {toggleSidebar} />
@@ -164,51 +283,84 @@
 				<p class="text-xl text-gray-600 max-w-2xl mx-auto">Predictive analytics for a cleaner tomorrow</p>
 			</div>
 
-			<!-- Key Predictions Summary -->
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+			{#if isLoading}
+				<div class="flex items-center justify-center py-20">
+					<div class="text-center">
+						<RefreshCw class="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
+						<p class="text-gray-600">Loading AI insights...</p>
+					</div>
+				</div>
+			{:else if errorMessage}
+				<div class="flex items-center justify-center py-20">
+					<div class="text-center max-w-md">
+						<AlertTriangle class="w-16 h-16 text-orange-500 mx-auto mb-4" />
+						<h3 class="text-xl font-semibold text-gray-900 mb-2">Unable to Load Data</h3>
+						<p class="text-gray-600 mb-4">{errorMessage}</p>
+						<button 
+							on:click={loadAllData}
+							class="bg-cyan-500 hover:bg-cyan-600 text-white px-6 py-3 rounded-lg transition-colors font-semibold"
+						>
+							Retry
+						</button>
+					</div>
+				</div>
+			{:else if !userId}
+				<div class="flex items-center justify-center py-20">
+					<div class="text-center max-w-md">
+						<Brain class="w-16 h-16 text-gray-400 mx-auto mb-4" />
+						<h3 class="text-xl font-semibold text-gray-900 mb-2">No User Data</h3>
+						<p class="text-gray-600">Please ensure you are logged in to view AI insights.</p>
+					</div>
+				</div>
+			{:else}
+				<!-- Key Predictions Summary - 3 Cards -->
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+				<!-- Card 1: Next Month's Carbon Emissions Projection -->
 				<div class="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
 					<div class="flex items-center justify-between mb-4">
-						<div class="p-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg">
-							<Calendar class="w-6 h-6 text-white" />
+						<div class="p-3 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg">
+							<Leaf class="w-6 h-6 text-white" />
 						</div>
 						<div class="flex items-center space-x-1 text-sm">
 							{#if keyPredictions.nextMonthEmissions.trend === 'down'}
 								<ArrowDown class="w-4 h-4 text-green-500" />
-								<span class="text-green-600 font-medium">{Math.abs(keyPredictions.nextMonthEmissions.change)}%</span>
+								<span class="text-green-600 font-medium">{Math.abs(keyPredictions.nextMonthEmissions.change).toFixed(1)}%</span>
 							{:else}
 								<ArrowUp class="w-4 h-4 text-red-500" />
-								<span class="text-red-600 font-medium">{Math.abs(keyPredictions.nextMonthEmissions.change)}%</span>
+								<span class="text-red-600 font-medium">{Math.abs(keyPredictions.nextMonthEmissions.change).toFixed(1)}%</span>
 							{/if}
 						</div>
 					</div>
-					<h3 class="text-lg font-semibold text-gray-900 mb-2">Next Month's Projection</h3>
-					<p class="text-3xl font-bold text-gray-900 mb-1">{keyPredictions.nextMonthEmissions.value}</p>
-					<p class="text-sm text-gray-500">kg CO₂ estimated</p>
+					<h3 class="text-lg font-semibold text-gray-900 mb-2">Carbon Emissions</h3>
+					<p class="text-3xl font-bold text-gray-900 mb-1">{keyPredictions.nextMonthEmissions.value.toLocaleString()}</p>
+					<p class="text-sm text-gray-500">kg CO₂ next month</p>
 				</div>
 
+				<!-- Card 2: Next Month's Energy Consumption Projection -->
 				<div class="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
 					<div class="flex items-center justify-between mb-4">
-						<div class="p-3 bg-gradient-to-r from-green-500 to-teal-600 rounded-lg">
-							<Target class="w-6 h-6 text-white" />
+						<div class="p-3 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-lg">
+							<Zap class="w-6 h-6 text-white" />
 						</div>
 						<div class="flex items-center space-x-1 text-sm">
-							<Sparkles class="w-4 h-4 text-green-500" />
-							<span class="text-green-600 font-medium">High</span>
+							{#if keyPredictions.nextMonthEnergy.trend === 'down'}
+								<ArrowDown class="w-4 h-4 text-green-500" />
+								<span class="text-green-600 font-medium">{Math.abs(keyPredictions.nextMonthEnergy.change).toFixed(1)}%</span>
+							{:else}
+								<ArrowUp class="w-4 h-4 text-red-500" />
+								<span class="text-red-600 font-medium">{Math.abs(keyPredictions.nextMonthEnergy.change).toFixed(1)}%</span>
+							{/if}
 						</div>
 					</div>
-					<h3 class="text-lg font-semibold text-gray-900 mb-2">AI Confidence Level</h3>
-					<p class="text-3xl font-bold text-gray-900 mb-1">{keyPredictions.aiConfidence}%</p>
-					<div class="w-full bg-gray-200 rounded-full h-2 mt-2">
-						<div 
-							class="bg-gradient-to-r from-green-500 to-teal-600 h-2 rounded-full transition-all duration-500"
-							style="width: {keyPredictions.aiConfidence}%"
-						></div>
-					</div>
+					<h3 class="text-lg font-semibold text-gray-900 mb-2">Energy Consumption</h3>
+					<p class="text-3xl font-bold text-gray-900 mb-1">{keyPredictions.nextMonthEnergy.value.toLocaleString()}</p>
+					<p class="text-sm text-gray-500">kWh next month</p>
 				</div>
 
+				<!-- Card 3: Top Risk Sources -->
 				<div class="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
 					<div class="flex items-center justify-between mb-4">
-						<div class="p-3 bg-gradient-to-r from-orange-500 to-red-600 rounded-lg">
+						<div class="p-3 bg-gradient-to-r from-red-500 to-pink-600 rounded-lg">
 							<AlertTriangle class="w-6 h-6 text-white" />
 						</div>
 					</div>
@@ -217,102 +369,157 @@
 						{#each keyPredictions.topRiskSources as source, i}
 							<div class="flex items-center justify-between">
 								<span class="text-gray-700">{i + 1}. {source}</span>
-								<div class="w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"></div>
+								<div class="w-2 h-2 bg-gradient-to-r from-red-500 to-pink-500 rounded-full"></div>
 							</div>
 						{/each}
 					</div>
 				</div>
 			</div>
 
-			<!-- Trend Visualization -->
-			<div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-				<!-- Predictions Chart -->
-				<div class="bg-white border border-gray-200 rounded-xl p-6">
-					<div class="flex items-center justify-between mb-6">
-						<h3 class="text-xl font-semibold text-gray-900">Emission Trends & Predictions</h3>
-						<div class="flex items-center space-x-2 text-sm text-gray-500">
-							<Activity class="w-4 h-4" />
-							<span>AI Powered</span>
-						</div>
-					</div>
-					
-					<!-- Chart Area -->
-					<div class="h-64 flex items-end justify-between space-x-3">
-						{#each trendData as point, i}
-							<div class="flex flex-col items-center space-y-2 flex-1">
-								<!-- Predicted Values -->
-								{#if point.predicted}
-									<div 
-										class="w-full bg-gradient-to-t from-cyan-400 to-cyan-200 rounded-t-lg opacity-70 border-2 border-dashed border-cyan-400 hover:opacity-90 transition-all cursor-pointer"
-										style="height: {(point.predicted / Math.max(...trendData.map(p => Math.max(p.actual || 0, p.predicted)))) * 80}%"
-										title="Predicted: {point.predicted} kg CO₂"
-									></div>
-								{/if}
-								
-								<!-- Actual Values -->
-								{#if point.actual}
-									<div 
-										class="w-full bg-gradient-to-t from-green-500 to-green-300 rounded-t-lg hover:from-green-400 hover:to-green-200 transition-all cursor-pointer -mt-2"
-										style="height: {(point.actual / Math.max(...trendData.map(p => Math.max(p.actual || 0, p.predicted)))) * 80}%"
-										title="Actual: {point.actual} kg CO₂"
-									></div>
-								{/if}
-								
-								<span class="text-xs text-gray-500 font-medium">{point.month}</span>
-							</div>
-						{/each}
-					</div>
-					
-					<!-- Legend -->
-					<div class="flex items-center justify-center space-x-6 mt-4 text-sm">
-						<div class="flex items-center space-x-2">
-							<div class="w-3 h-3 bg-green-500 rounded"></div>
-							<span class="text-gray-600">Actual</span>
-						</div>
-						<div class="flex items-center space-x-2">
-							<div class="w-3 h-3 bg-cyan-400 rounded border-2 border-dashed border-cyan-500"></div>
-							<span class="text-gray-600">AI Predicted</span>
-						</div>
-					</div>
+			<!-- Two Graphs Side by Side -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+	<!-- Carbon Emissions Chart -->
+	<div class="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+		<div class="flex items-center justify-between mb-6">
+			<div class="flex items-center space-x-3">
+				<div class="p-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg">
+					<Leaf class="w-5 h-5 text-white" />
 				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Carbon Emissions Trend</h3>
+					<p class="text-sm text-gray-500">Actual vs Predicted (kg CO₂)</p>
+				</div>
+			</div>
+			<Activity class="w-5 h-5 text-gray-400" />
+		</div>
 
-				<!-- Generate New Insight Panel -->
-				<div class="bg-white border border-gray-200 rounded-xl p-6">
-					<div class="text-center">
-						<div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full mb-4">
-							<Bot class="w-8 h-8 text-white" />
-						</div>
-						<h3 class="text-xl font-semibold text-gray-900 mb-2">AI Analysis Engine</h3>
-						<p class="text-gray-600 mb-6">Let our AI discover new patterns and optimization opportunities in your emission data.</p>
+		<!-- Chart Area -->
+		<div class="h-64 flex items-end justify-between space-x-2 px-2">
+			{#each emissionsTrendData as point}
+				<div class="flex-1 flex flex-col items-center space-y-2">
+					<!-- Bars Container -->
+					<div class="w-full flex items-end justify-center space-x-1 h-48">
+						<!-- Actual Bar -->
+						{#if point.actual !== null}
+							<div 
+								class="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-md transition-all duration-500 hover:from-green-600 hover:to-emerald-500 relative group"
+								style="height: {getBarHeight(point.actual, emissionsMaxValue)}"
+							>
+								<!-- Tooltip -->
+								<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+									Actual: {point.actual.toLocaleString()} kg
+								</div>
+							</div>
+						{:else}
+							<div class="w-full bg-gray-100 rounded-t-md" style="height: 3%"></div>
+						{/if}
 						
-						<button 
-							on:click={generateNewInsight}
-							disabled={isGeneratingInsight}
-							class="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 flex items-center justify-center space-x-2 mx-auto shadow-lg hover:shadow-xl"
+					<!-- Predicted Bar -->
+					{#if point.predicted !== null}
+						<div 
+							class="w-full bg-gradient-to-t from-cyan-500 to-blue-400 rounded-t-md transition-all duration-500 hover:from-cyan-600 hover:to-blue-500 relative group"
+							style="height: {getBarHeight(point.predicted, emissionsMaxValue)}"
 						>
-							{#if isGeneratingInsight}
-								<RefreshCw class="w-5 h-5 animate-spin" />
-								<span>Analyzing Data...</span>
-							{:else}
-								<Sparkles class="w-5 h-5" />
-								<span>Generate New Insight</span>
-							{/if}
-						</button>
-
-						<!-- AI Stats -->
-						<div class="grid grid-cols-2 gap-4 mt-8">
-							<div class="text-center p-3 bg-gray-50 rounded-lg">
-								<p class="text-2xl font-bold text-purple-600">47</p>
-								<p class="text-xs text-gray-500">Insights Generated</p>
-							</div>
-							<div class="text-center p-3 bg-gray-50 rounded-lg">
-								<p class="text-2xl font-bold text-purple-600">92%</p>
-								<p class="text-xs text-gray-500">Accuracy Rate</p>
+							<!-- Tooltip -->
+							<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+								Predicted: {point.predicted.toLocaleString()} kg
 							</div>
 						</div>
+					{:else}
+						<div class="w-full bg-gray-100 rounded-t-md" style="height: 3%"></div>
+					{/if}
 					</div>
+					
+					<!-- Month Label -->
+					<span class="text-xs font-medium text-gray-600">{point.month}</span>
+				</div>
+			{/each}
+		</div>
+
+		<!-- Legend -->
+		<div class="flex items-center justify-center space-x-6 mt-6 pt-4 border-t border-gray-100">
+			<div class="flex items-center space-x-2">
+				<div class="w-4 h-4 bg-gradient-to-r from-green-500 to-emerald-400 rounded"></div>
+				<span class="text-sm text-gray-600">Actual</span>
+			</div>
+			<div class="flex items-center space-x-2">
+				<div class="w-4 h-4 bg-gradient-to-r from-cyan-500 to-blue-400 rounded border-2 border-dashed border-cyan-300"></div>
+				<span class="text-sm text-gray-600">Predicted</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- Energy Consumption Chart -->
+	<div class="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+		<div class="flex items-center justify-between mb-6">
+			<div class="flex items-center space-x-3">
+				<div class="p-2 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-lg">
+					<Zap class="w-5 h-5 text-white" />
+				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-gray-900">Energy Consumption Trend</h3>
+					<p class="text-sm text-gray-500">Actual vs Predicted (kWh)</p>
 				</div>
 			</div>
+			<Activity class="w-5 h-5 text-gray-400" />
+		</div>
+
+		<!-- Chart Area -->
+		<div class="h-64 flex items-end justify-between space-x-2 px-2">
+			{#each energyTrendData as point}
+				<div class="flex-1 flex flex-col items-center space-y-2">
+					<!-- Bars Container -->
+					<div class="w-full flex items-end justify-center space-x-1 h-48">
+						<!-- Actual Bar -->
+						{#if point.actual !== null}
+							<div 
+								class="w-full bg-gradient-to-t from-yellow-500 to-amber-400 rounded-t-md transition-all duration-500 hover:from-yellow-600 hover:to-amber-500 relative group"
+								style="height: {getBarHeight(point.actual, energyMaxValue)}"
+							>
+								<!-- Tooltip -->
+								<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+									Actual: {point.actual.toLocaleString()} kWh
+								</div>
+							</div>
+						{:else}
+							<div class="w-full bg-gray-100 rounded-t-md" style="height: 3%"></div>
+						{/if}
+						
+					<!-- Predicted Bar -->
+					{#if point.predicted !== null}
+						<div 
+							class="w-full bg-gradient-to-t from-purple-500 to-pink-400 rounded-t-md transition-all duration-500 hover:from-purple-600 hover:to-pink-500 relative group"
+							style="height: {getBarHeight(point.predicted, energyMaxValue)}"
+						>
+							<!-- Tooltip -->
+							<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+								Predicted: {point.predicted.toLocaleString()} kWh
+							</div>
+						</div>
+					{:else}
+						<div class="w-full bg-gray-100 rounded-t-md" style="height: 3%"></div>
+					{/if}
+					</div>
+					
+					<!-- Month Label -->
+					<span class="text-xs font-medium text-gray-600">{point.month}</span>
+				</div>
+			{/each}
+		</div>
+
+		<!-- Legend -->
+		<div class="flex items-center justify-center space-x-6 mt-6 pt-4 border-t border-gray-100">
+			<div class="flex items-center space-x-2">
+				<div class="w-4 h-4 bg-gradient-to-r from-yellow-500 to-amber-400 rounded"></div>
+				<span class="text-sm text-gray-600">Actual</span>
+			</div>
+			<div class="flex items-center space-x-2">
+				<div class="w-4 h-4 bg-gradient-to-r from-purple-500 to-pink-400 rounded border-2 border-dashed border-purple-300"></div>
+				<span class="text-sm text-gray-600">Predicted</span>
+			</div>
+		</div>
+	</div>
+</div>
 
 			<!-- AI Insights Feed -->
 			<div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -364,9 +571,11 @@
 					{/each}
 				</div>
 			</div>
+			{/if}
 		</div>
 	</div>
 </div>
+{/if}
 
 <style>
 	@keyframes glow {
