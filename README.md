@@ -21,10 +21,10 @@ EcoMind is a full-stack web application designed to track, analyze, and visualiz
 ## Screenshots
 
 ### Home Page
-![Home Page](frontend/src/lib/assets/overview.jpeg)
+![Home Page](other/HomePage.png)
 
-### Dashboard / Emission Page
-![Dashboard / Emission Page](frontend/src/lib/assets/overview2.jpeg)
+### Emission Page
+![Emission Page](other/EmissionPage.png)
 
 ## Project Structure
 ```
