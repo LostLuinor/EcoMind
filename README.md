@@ -18,15 +18,22 @@ EcoMind is a full-stack web application designed to track, analyze, and visualiz
 - **AI/ML:** Python (for insights and recommendations)
 - **Database:** MySQL
 
-## Project Structure
+## Screenshots
 
+### Home Page
+![Home Page](frontend/src/lib/assets/overview.jpeg)
+
+### Dashboard / Emission Page
+![Dashboard / Emission Page](frontend/src/lib/assets/overview2.jpeg)
+
+## Project Structure
 ```
 MiniProject/
 ├── backend/           # FastAPI backend, database models, API endpoints
 │   ├── main.py        # Main FastAPI app
 │   ├── .env           # Environment variables for DB connection
 │   └── ...
-├── test/              # SvelteKit frontend
+├── frontend/          # SvelteKit frontend (previously 'test')
 │   ├── src/           # Frontend source code
 │   ├── package.json   # Frontend dependencies
 │   └── ...
