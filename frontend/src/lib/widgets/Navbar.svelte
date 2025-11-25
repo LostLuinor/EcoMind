@@ -66,9 +66,11 @@
 					<Leaf class="w-5 h-5 text-white" />
 				</div>
 				<div class="flex items-center gap-2">
-					<span class="font-bold text-xl bg-gradient-to-r from-green-700 to-teal-700 bg-clip-text text-transparent font-[cursive]">EcoMind</span>
+					<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600&display=swap" rel="stylesheet">
 
-					<!-- <span class="text-green-600 text-lg">🌿</span> -->
+					<span class="text-xl font-semibold bg-gradient-to-r from-green-700 to-teal-700 bg-clip-text text-transparent" style="font-family:'Quicksand', sans-serif;">
+					EcoMind
+					</span>
 				</div>
 			</div>
 		</div>
